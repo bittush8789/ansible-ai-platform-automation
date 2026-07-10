@@ -8,7 +8,7 @@ An enterprise-grade, one-command Ansible automation repository that boots a Kube
 
 Below is a mockup preview of the Grafana & MLflow composite dashboard configured by this framework:
 
-![AI Platform Dashboard Mockup](file:///d:/ansible-ai-platform-automation/assets/dashboard_mockup.png)
+![AI Platform Dashboard Mockup](./assets/dashboard_mockup.png)
 
 ---
 
