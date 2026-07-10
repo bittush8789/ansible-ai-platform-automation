@@ -1,0 +1,31 @@
+---
+# Tasks for minio role - Deploy MinIO Object Storage
+
+- name: Render MinIO manifests
+  template:
+    src: minio-manifests.yaml.j2
+    dest: /tmp/minio-manifests.yaml
+    owner: root
+    group: root
+    mode: '0644'
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Delete existing bucket initialization Job if it exists
+  command: kubectl delete job minio-bucket-init -n {{ k8s_mlops_namespace }} --ignore-not-found=true
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Apply MinIO Kubernetes manifests
+  command: kubectl apply -f /tmp/minio-manifests.yaml
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Wait for MinIO deployment to be ready
+  shell: |
+    kubectl rollout status deployment/minio -n {{ k8s_mlops_namespace }} --timeout=120s
+  changed_when: false
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Wait for bucket initialization Job to complete
+  shell: |
+    kubectl wait --for=condition=complete job/minio-bucket-init -n {{ k8s_mlops_namespace }} --timeout=120s
+  changed_when: false
+  when: inventory_hostname in groups['k8s_master']

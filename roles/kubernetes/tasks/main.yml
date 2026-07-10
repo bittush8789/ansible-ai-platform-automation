@@ -1,0 +1,171 @@
+---
+# Tasks for kubernetes role - Set up K3s Cluster & Helm
+
+# ----------------------------------------------------
+# 1. Install Helm
+# ----------------------------------------------------
+- name: Download Helm installer script
+  get_url:
+    url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+    dest: /tmp/get_helm.sh
+    mode: '0755'
+
+- name: Run Helm installer script
+  command: /tmp/get_helm.sh
+  args:
+    creates: /usr/local/bin/helm
+
+# ----------------------------------------------------
+# 2. Install K3s (Master)
+# ----------------------------------------------------
+- name: Install K3s Server on Master
+  shell: |
+    curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" sh -s - \
+      --cluster-cidr="{{ k3s_cluster_cidr }}" \
+      --service-cidr="{{ k3s_service_cidr }}" \
+      --disable=traefik \
+      --write-kubeconfig-mode=644
+  args:
+    creates: /usr/local/bin/k3s
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Wait for K3s Master to start
+  wait_for:
+    port: 6443
+    delay: 5
+    timeout: 60
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Retrieve K3s Node Join Token from Master
+  slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: k3s_node_token_b64
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Set Join Token Fact
+  set_fact:
+    k3s_node_token: "{{ k3s_node_token_b64['content'] | b64decode | trim }}"
+  delegate_to: "{{ item }}"
+  delegate_facts: true
+  loop: "{{ groups['k8s_worker'] | default([]) }}"
+  when: inventory_hostname in groups['k8s_master'] and (groups['k8s_worker'] | default([]) | length > 0)
+
+# ----------------------------------------------------
+# 3. Install K3s (Workers)
+# ----------------------------------------------------
+- name: Install K3s Agent on Worker Nodes
+  shell: |
+    curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" K3S_URL="https://{{ hostvars[groups['k8s_master'][0]]['ansible_host'] }}:6443" K3S_TOKEN="{{ hostvars[groups['k8s_master'][0]]['k3s_node_token'] }}" sh -
+  args:
+    creates: /usr/local/bin/k3s
+  when:
+    - inventory_hostname in groups['k8s_worker']
+    - hostvars[groups['k8s_master'][0]]['k3s_node_token'] is defined
+
+# ----------------------------------------------------
+# 4. Configure Kubectl access
+# ----------------------------------------------------
+- name: Create .kube directories for users
+  file:
+    path: "{{ item }}/.kube"
+    state: directory
+    owner: "{{ 'root' if item == '/root' else admin_user }}"
+    group: "{{ 'root' if item == '/root' else admin_user }}"
+    mode: '0700'
+  loop:
+    - "/home/{{ admin_user }}"
+    - "/root"
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Link K3s configuration to kubectl config
+  copy:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: "{{ item }}/.kube/config"
+    remote_src: yes
+    owner: "{{ 'root' if item == '/root' else admin_user }}"
+    group: "{{ 'root' if item == '/root' else admin_user }}"
+    mode: '0600'
+  loop:
+    - "/home/{{ admin_user }}"
+    - "/root"
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Set KUBECONFIG environment variable in bashrc
+  lineinfile:
+    path: "{{ item }}/.bashrc"
+    line: "export KUBECONFIG={{ item }}/.kube/config"
+    state: present
+  loop:
+    - "/home/{{ admin_user }}"
+    - "/root"
+  when: inventory_hostname in groups['k8s_master']
+
+# ----------------------------------------------------
+# 5. GPU node configuration & check (Simulated if unavailable)
+# ----------------------------------------------------
+- name: Check for physical NVIDIA GPUs
+  shell: lspci | grep -i nvidia
+  register: gpu_check
+  failed_when: false
+  changed_when: false
+
+- name: Log GPU detection status
+  debug:
+    msg: "NVIDIA GPU Detected: {{ 'Yes' if gpu_check.rc == 0 else 'No' }}"
+
+- name: Configure GPU Node
+  block:
+    - name: Add NVIDIA Container Toolkit Repository GPG Key
+      apt_key:
+        url: https://nvidia.github.io/libnvidia-container/gpgkey
+        state: present
+        keyring: /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+
+    - name: Add NVIDIA Container Toolkit Repository
+      apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://nvidia.github.io/libnvidia-container/stable/deb/$(ARCH) /"
+        state: present
+        filename: nvidia-container-toolkit
+
+    - name: Install NVIDIA Container Toolkit
+      apt:
+        name: nvidia-container-toolkit
+        state: present
+        update_cache: yes
+
+    - name: Configure Containerd to use NVIDIA runtime
+      command: nvidia-ctk runtime configure --runtime=containerd
+      notify: Restart containerd
+
+    # Mark K3s node as GPU enabled
+    - name: Add GPU label to node
+      command: kubectl label node {{ inventory_hostname }} hardware-type=gpu --overwrite
+      delegate_to: "{{ groups['k8s_master'][0] }}"
+      ignore_errors: yes
+  when: gpu_check.rc == 0
+
+- name: Simulate/Mock GPU support on CPU-only nodes
+  block:
+    - name: Warn that GPU setup is simulated
+      debug:
+        msg: "WARNING: NVIDIA GPU hardware not found. Simulating GPU capabilities in CPU-compat mode."
+
+    - name: Configure mock label on node
+      command: kubectl label node {{ inventory_hostname }} hardware-type=simulated-gpu --overwrite
+      delegate_to: "{{ groups['k8s_master'][0] }}"
+      ignore_errors: yes
+  when: gpu_check.rc != 0
+
+# ----------------------------------------------------
+# 6. Validate Cluster Ready State
+# ----------------------------------------------------
+- name: Validate that Kubeconfig is working and nodes are Ready
+  command: kubectl get nodes -o wide
+  register: kubectl_nodes
+  changed_when: false
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Output Cluster Nodes status
+  debug:
+    var: kubectl_nodes.stdout_lines
+  when: inventory_hostname in groups['k8s_master']

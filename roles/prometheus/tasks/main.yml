@@ -1,0 +1,43 @@
+---
+# Tasks for prometheus role - Deploy Prometheus Monitoring Engine
+
+- name: Create Monitoring namespace
+  kubernetes.core.k8s:
+    name: monitoring
+    kind: Namespace
+    state: present
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Add prometheus-community Helm repository
+  kubernetes.core.helm_repository:
+    name: prometheus-community
+    repo_url: "https://prometheus-community.github.io/helm-charts"
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Update Helm repositories
+  shell: helm repo update
+  changed_when: false
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Render Prometheus Helm overrides
+  template:
+    src: prometheus-values.yaml.j2
+    dest: /tmp/prometheus-values.yaml
+    owner: root
+    group: root
+    mode: '0644'
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Deploy Prometheus stack using Helm
+  shell: |
+    helm upgrade --install prometheus prometheus-community/prometheus \
+      --namespace monitoring \
+      --version "{{ prometheus_helm_version }}" \
+      -f /tmp/prometheus-values.yaml
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Wait for Prometheus Server rollout
+  shell: |
+    kubectl rollout status deployment/prometheus-server -n monitoring --timeout=120s
+  changed_when: false
+  when: inventory_hostname in groups['k8s_master']

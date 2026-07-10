@@ -1,0 +1,9 @@
+---
+# Playbook to provision Linux Server & Docker/Containerd runtime
+
+- name: Provision Core System & Container Runtime
+  hosts: k8s_cluster
+  become: yes
+  roles:
+    - common
+    - docker

@@ -1,0 +1,102 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mlflow-secret
+  namespace: {{ k8s_mlops_namespace }}
+type: Opaque
+stringData:
+  DB_USER: "{{ vault_postgres_user }}"
+  DB_PASSWORD: "{{ vault_postgres_password }}"
+  AWS_ACCESS_KEY_ID: "{{ vault_minio_root_user }}"
+  AWS_SECRET_ACCESS_KEY: "{{ vault_minio_root_password }}"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow
+  namespace: {{ k8s_mlops_namespace }}
+  labels:
+    app: mlflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlflow
+  template:
+    metadata:
+      labels:
+        app: mlflow
+    spec:
+      containers:
+        - name: mlflow
+          image: ghcr.io/mlflow/mlflow:v2.7.1
+          command:
+            - mlflow
+            - server
+            - --host
+            - 0.0.0.0
+            - --port
+            - "5000"
+            - --backend-store-uri
+            - postgresql://$(DB_USER):$(DB_PASSWORD)@{{ postgres_service_name }}.{{ k8s_mlops_namespace }}.svc.cluster.local:{{ postgres_port }}/{{ postgres_db_name }}
+            - --default-artifact-root
+            - s3://{{ minio_mlflow_bucket }}/
+          ports:
+            - containerPort: 5000
+              name: mlflow-port
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mlflow-secret
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mlflow-secret
+                  key: DB_PASSWORD
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: mlflow-secret
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mlflow-secret
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: MLFLOW_S3_ENDPOINT_URL
+              value: "http://{{ minio_service_name }}.{{ k8s_mlops_namespace }}.svc.cluster.local:{{ minio_api_port }}"
+            - name: MLFLOW_S3_IGNORE_TLS
+              value: "true"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ mlflow_service_name }}
+  namespace: {{ k8s_mlops_namespace }}
+spec:
+  ports:
+    - port: {{ mlflow_port }}
+      targetPort: 5000
+  selector:
+    app: mlflow
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mlflow-ingress
+  namespace: {{ k8s_mlops_namespace }}
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: {{ ingress_domain_mlflow }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ mlflow_service_name }}
+                port:
+                  number: {{ mlflow_port }}

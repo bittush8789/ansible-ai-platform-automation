@@ -1,0 +1,11 @@
+---
+# Playbook to deploy NGINX Ingress and MLflow Platform Stack
+
+- name: Deploy MLflow Platform Stack on K8s Master
+  hosts: k8s_master
+  become: yes
+  roles:
+    - nginx
+    - postgres
+    - minio
+    - mlflow

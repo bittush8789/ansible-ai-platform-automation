@@ -1,0 +1,8 @@
+---
+# Playbook to bootstrap Kubernetes Cluster & configure nodes
+
+- name: Bootstrap Kubernetes (K3s) Cluster
+  hosts: k8s_cluster
+  become: yes
+  roles:
+    - kubernetes

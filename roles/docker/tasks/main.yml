@@ -1,0 +1,81 @@
+---
+# Tasks for docker role - Install and Configure Docker Container Runtime
+
+- name: Uninstall legacy container packages
+  apt:
+    name:
+      - docker
+      - docker-engine
+      - docker.io
+      - lxc-docker
+      - runc
+    state: absent
+    purge: yes
+
+- name: Install apt transport & key management packages
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - software-properties-common
+    state: present
+
+- name: Add Docker official GPG key
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+    keyring: /usr/share/keyrings/docker-archive-keyring.gpg
+
+- name: Get Ubuntu codename
+  command: lsb_release -cs
+  register: ubuntu_codename
+  changed_when: false
+
+- name: Add Docker repository
+  apt_repository:
+    repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu {{ ubuntu_codename.stdout }} stable"
+    state: present
+    filename: docker
+
+- name: Install Docker CE and Containerd
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+    state: present
+    update_cache: yes
+
+- name: Create Docker configuration directory
+  file:
+    path: /etc/docker
+    state: directory
+    mode: '0755'
+
+- name: Deploy Docker daemon.json configuration
+  template:
+    src: daemon.json.j2
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Restart docker
+    - Restart containerd
+
+- name: Ensure Docker and containerd are enabled and started
+  systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+  loop:
+    - docker
+    - containerd
+
+- name: Add deploy user to docker group
+  user:
+    name: "{{ admin_user }}"
+    groups: docker
+    append: yes

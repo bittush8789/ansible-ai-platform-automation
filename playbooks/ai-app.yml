@@ -1,0 +1,8 @@
+---
+# Playbook to build and deploy FastAPI AI Model Service
+
+- name: Build and Deploy FastAPI AI App on K8s Master
+  hosts: k8s_master
+  become: yes
+  roles:
+    - ai-app

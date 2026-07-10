@@ -1,0 +1,57 @@
+# Global Variables for AI Platform Infrastructure Automation
+
+# System Configuration
+admin_user: deploy
+ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP1234567890abcdefghijklmnopqrstuvwxyz deploy@ai-platform"
+system_timezone: "UTC"
+common_packages:
+  - curl
+  - git
+  - unzip
+  - ufw
+  - iptables
+  - systemd-timesyncd
+  - python3-pip
+  - python3-venv
+
+# Docker Configuration
+docker_cgroup_driver: systemd
+
+# Kubernetes Configuration
+k3s_version: "v1.28.2+k3s1"
+k3s_cluster_cidr: "10.42.0.0/16"
+k3s_service_cidr: "10.43.0.0/16"
+k8s_mlops_namespace: "mlops"
+
+# PostgreSQL Configuration
+postgres_service_name: "postgres-service"
+postgres_db_name: "mlflow"
+postgres_port: 5432
+postgres_storage_size: "5Gi"
+
+# MinIO Configuration
+minio_service_name: "minio-service"
+minio_api_port: 9000
+minio_console_port: 9001
+minio_storage_size: "10Gi"
+minio_mlflow_bucket: "mlflow"
+
+# MLflow Configuration
+mlflow_service_name: "mlflow-service"
+mlflow_port: 5000
+
+# AI FastAPI App Configuration
+ai_app_name: "fastapi-ai-app"
+ai_app_image_name: "fastapi-ai-app:latest"
+ai_app_replicas: 2
+ai_app_port: 8000
+
+# Monitoring Configuration
+prometheus_helm_version: "25.8.0"
+grafana_helm_version: "7.0.0"
+
+# Ingress Domains (Hostnames for routing)
+ingress_domain_mlflow: "mlflow.local"
+ingress_domain_minio: "minio.local"
+ingress_domain_grafana: "grafana.local"
+ingress_domain_ai_app: "ai-app.local"

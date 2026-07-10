@@ -1,0 +1,13 @@
+# Sensitive Credentials for AI Platform Infrastructure
+# Note: For production deployments, encrypt this file using:
+#   ansible-vault encrypt group_vars/vault.yml
+# And run playbooks with `--ask-vault-pass` or `--vault-password-file`.
+
+vault_postgres_user: "postgres"
+vault_postgres_password: "SuperSecurePostgresPassword123!"
+
+vault_minio_root_user: "minioadmin"
+vault_minio_root_password: "SuperSecureMinioPassword123!"
+
+vault_grafana_admin_user: "admin"
+vault_grafana_admin_password: "SuperSecureGrafanaPassword123!"

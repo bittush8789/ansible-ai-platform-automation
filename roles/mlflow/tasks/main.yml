@@ -1,0 +1,21 @@
+---
+# Tasks for mlflow role - Deploy MLflow Tracking Server
+
+- name: Render MLflow manifests
+  template:
+    src: mlflow-manifests.yaml.j2
+    dest: /tmp/mlflow-manifests.yaml
+    owner: root
+    group: root
+    mode: '0644'
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Apply MLflow Kubernetes manifests
+  command: kubectl apply -f /tmp/mlflow-manifests.yaml
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Wait for MLflow deployment to be ready
+  shell: |
+    kubectl rollout status deployment/mlflow -n {{ k8s_mlops_namespace }} --timeout=120s
+  changed_when: false
+  when: inventory_hostname in groups['k8s_master']

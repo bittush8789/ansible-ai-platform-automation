@@ -1,0 +1,9 @@
+---
+# Playbook to deploy Prometheus & Grafana Monitoring
+
+- name: Deploy Monitoring Stack on K8s Master
+  hosts: k8s_master
+  become: yes
+  roles:
+    - prometheus
+    - grafana

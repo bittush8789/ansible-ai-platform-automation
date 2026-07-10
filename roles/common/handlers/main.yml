@@ -1,0 +1,7 @@
+---
+# Handlers for common role
+
+- name: Restart timesyncd
+  systemd:
+    name: systemd-timesyncd
+    state: restarted

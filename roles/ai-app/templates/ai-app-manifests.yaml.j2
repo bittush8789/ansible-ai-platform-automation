@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ ai_app_name }}
+  namespace: {{ k8s_mlops_namespace }}
+  labels:
+    app: {{ ai_app_name }}
+spec:
+  replicas: {{ ai_app_replicas }}
+  selector:
+    matchLabels:
+      app: {{ ai_app_name }}
+  template:
+    metadata:
+      labels:
+        app: {{ ai_app_name }}
+    spec:
+      containers:
+        - name: ai-app
+          image: {{ ai_app_image_name }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ ai_app_name }}-service
+  namespace: {{ k8s_mlops_namespace }}
+spec:
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+  selector:
+    app: {{ ai_app_name }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ ai_app_name }}-ingress
+  namespace: {{ k8s_mlops_namespace }}
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: {{ ingress_domain_ai_app }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ ai_app_name }}-service
+                port:
+                  number: 8000

@@ -1,0 +1,70 @@
+---
+# Tasks for grafana role - Deploy Grafana Observability Dashboards
+
+- name: Add grafana Helm repository
+  kubernetes.core.helm_repository:
+    name: grafana
+    repo_url: "https://grafana.github.io/helm-charts"
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Update Helm repositories
+  shell: helm repo update
+  changed_when: false
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Render Grafana Helm overrides
+  template:
+    src: grafana-values.yaml.j2
+    dest: /tmp/grafana-values.yaml
+    owner: root
+    group: root
+    mode: '0644'
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Deploy Grafana using Helm
+  shell: |
+    helm upgrade --install grafana grafana/grafana \
+      --namespace monitoring \
+      --version "{{ grafana_helm_version }}" \
+      -f /tmp/grafana-values.yaml
+  when: inventory_hostname in groups['k8s_master']
+
+# Copy dashboard files to master node to build ConfigMaps
+- name: Copy Node Exporter Dashboard JSON
+  copy:
+    src: dashboards/node-exporter.json
+    dest: /tmp/node-exporter.json
+    owner: root
+    group: root
+    mode: '0644'
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Copy K8s Metrics Dashboard JSON
+  copy:
+    src: dashboards/k8s-metrics.json
+    dest: /tmp/k8s-metrics.json
+    owner: root
+    group: root
+    mode: '0644'
+  when: inventory_hostname in groups['k8s_master']
+
+# Create dashboard ConfigMaps with the auto-load label
+- name: Deploy Node Exporter Dashboard ConfigMap
+  shell: |
+    kubectl create configmap node-exporter-dashboard -n monitoring --from-file=node-exporter.json=/tmp/node-exporter.json --dry-run=client -o yaml \
+    | kubectl label -f - --local=true grafana_dashboard="1" -o yaml \
+    | kubectl apply -n monitoring -f -
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Deploy K8s Metrics Dashboard ConfigMap
+  shell: |
+    kubectl create configmap k8s-metrics-dashboard -n monitoring --from-file=k8s-metrics.json=/tmp/k8s-metrics.json --dry-run=client -o yaml \
+    | kubectl label -f - --local=true grafana_dashboard="1" -o yaml \
+    | kubectl apply -n monitoring -f -
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Wait for Grafana rollout to be ready
+  shell: |
+    kubectl rollout status deployment/grafana -n monitoring --timeout=120s
+  changed_when: false
+  when: inventory_hostname in groups['k8s_master']

@@ -1,0 +1,94 @@
+---
+# Tasks for common role - Linux Server Configuration & Hardening
+
+- name: Ensure deploy group exists
+  group:
+    name: "{{ admin_user }}"
+    state: present
+
+- name: Create administrative deployment user
+  user:
+    name: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    shell: /bin/bash
+    create_home: yes
+    state: present
+
+- name: Configure passwordless sudo for admin user
+  copy:
+    content: "{{ admin_user }} ALL=(ALL) NOPASSWD:ALL"
+    dest: "/etc/sudoers.d/{{ admin_user }}"
+    owner: root
+    group: root
+    mode: '0440'
+
+- name: Create .ssh directory for deploy user
+  file:
+    path: "/home/{{ admin_user }}/.ssh"
+    state: directory
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: '0700'
+
+- name: Set authorized SSH key for deploy user
+  authorized_key:
+    user: "{{ admin_user }}"
+    state: present
+    key: "{{ ssh_public_key }}"
+
+- name: Set system timezone
+  timezone:
+    name: "{{ system_timezone }}"
+  notify: Restart timesyncd
+
+- name: Install baseline system packages
+  apt:
+    name: "{{ common_packages }}"
+    state: present
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Configure sysctl parameters for K8s and security
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+  loop:
+    - { key: 'net.ipv4.ip_forward', value: '1' }
+    - { key: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+    - { key: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+    - { key: 'fs.file-max', value: '2097152' }
+    - { key: 'net.ipv4.tcp_syncookies', value: '1' }
+
+- name: Configure file limits for MLOps workloads
+  pam_limits:
+    domain: '*'
+    limit_type: "{{ item.type }}"
+    limit_item: "{{ item.item }}"
+    value: "{{ item.value }}"
+  loop:
+    - { type: 'soft', item: 'nofile', value: '65536' }
+    - { type: 'hard', item: 'nofile', value: '65536' }
+    - { type: 'soft', item: 'nproc', value: '4096' }
+    - { type: 'hard', item: 'nproc', value: '4096' }
+
+- name: Configure UFW Firewall rules
+  ufw:
+    rule: "{{ item.rule }}"
+    port: "{{ item.port }}"
+    proto: "{{ item.proto | default('any') }}"
+    state: enabled
+  loop:
+    - { rule: 'allow', port: '22', proto: 'tcp' }      # SSH
+    - { rule: 'allow', port: '80', proto: 'tcp' }      # HTTP
+    - { rule: 'allow', port: '443', proto: 'tcp' }     # HTTPS
+    - { rule: 'allow', port: '6443', proto: 'tcp' }    # K8s API
+    - { rule: 'allow', port: '8472', proto: 'udp' }    # Flannel VXLAN
+    - { rule: 'allow', port: '10250', proto: 'tcp' }   # Kubelet API
+
+- name: Ensure timesyncd service is running and enabled
+  systemd:
+    name: systemd-timesyncd
+    state: started
+    enabled: yes

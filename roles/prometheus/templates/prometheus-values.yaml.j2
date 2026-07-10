@@ -1,0 +1,24 @@
+# Prometheus Helm values overrides
+
+server:
+  persistentVolume:
+    enabled: true
+    storageClass: "local-path"
+    size: 8Gi
+  service:
+    type: ClusterIP
+    servicePort: 80
+
+alertmanager:
+  enabled: false
+
+prometheus-pushgateway:
+  enabled: false
+
+# Deploy Node Exporter to get host-level metrics (CPU, Memory, Disk)
+nodeExporter:
+  enabled: true
+
+# Deploy Kube State Metrics to get cluster/pod level details
+kube-state-metrics:
+  enabled: true

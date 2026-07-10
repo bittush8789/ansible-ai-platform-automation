@@ -1,0 +1,30 @@
+{
+  "k8s_master": {
+    "hosts": ["dynamic-master-01"],
+    "vars": {}
+  },
+  "k8s_worker": {
+    "hosts": ["dynamic-worker-01", "dynamic-worker-02"],
+    "vars": {}
+  },
+  "gpu_nodes": {
+    "hosts": ["dynamic-worker-02"],
+    "vars": {}
+  },
+  "_meta": {
+    "hostvars": {
+      "dynamic-master-01": {
+        "ansible_host": "192.168.100.11",
+        "ansible_user": "deploy"
+      },
+      "dynamic-worker-01": {
+        "ansible_host": "192.168.100.12",
+        "ansible_user": "deploy"
+      },
+      "dynamic-worker-02": {
+        "ansible_host": "192.168.100.13",
+        "ansible_user": "deploy"
+      }
+    }
+  }
+}

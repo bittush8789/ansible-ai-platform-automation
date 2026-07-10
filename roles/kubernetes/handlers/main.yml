@@ -1,0 +1,12 @@
+---
+# Handlers for kubernetes role
+
+- name: Restart containerd
+  systemd:
+    name: containerd
+    state: restarted
+
+- name: Restart k3s
+  systemd:
+    name: k3s
+    state: restarted

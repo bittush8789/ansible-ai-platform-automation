@@ -1,0 +1,8 @@
+---
+# Master Playbook for AI Platform Infrastructure Automation Framework
+
+- import_playbook: docker.yml
+- import_playbook: kubernetes.yml
+- import_playbook: mlflow.yml
+- import_playbook: monitoring.yml
+- import_playbook: ai-app.yml

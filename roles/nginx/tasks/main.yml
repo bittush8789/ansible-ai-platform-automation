@@ -1,0 +1,36 @@
+---
+# Tasks for nginx role - Deploy NGINX Ingress Controller
+
+- name: Add ingress-nginx Helm repository
+  kubernetes.core.helm_repository:
+    name: ingress-nginx
+    repo_url: "https://kubernetes.github.io/ingress-nginx"
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Update Helm repositories
+  shell: helm repo update
+  changed_when: false
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Deploy Ingress Nginx Controller using Helm
+  shell: |
+    helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+      --namespace ingress-nginx \
+      --create-namespace \
+      --set controller.service.type=LoadBalancer \
+      --set controller.watchIngressWithoutClass=true \
+      --set controller.metrics.enabled=true
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Wait for NGINX Ingress Controller deployment to be ready
+  shell: |
+    kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=120s
+  register: ingress_status
+  changed_when: false
+  failed_when: false
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Output Ingress status
+  debug:
+    var: ingress_status.stdout_lines
+  when: inventory_hostname in groups['k8s_master']

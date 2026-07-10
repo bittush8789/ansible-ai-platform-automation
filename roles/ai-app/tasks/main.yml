@@ -1,0 +1,72 @@
+---
+# Tasks for ai-app role - Build and Deploy FastAPI Model Server
+
+- name: Create local build directory on Master node
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - /tmp/fastapi-ai-app
+    - /tmp/fastapi-ai-app/app
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Copy FastAPI source files
+  copy:
+    src: app/main.py
+    dest: /tmp/fastapi-ai-app/app/main.py
+    owner: root
+    group: root
+    mode: '0644'
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Copy FastAPI requirements.txt
+  copy:
+    src: app/requirements.txt
+    dest: /tmp/fastapi-ai-app/app/requirements.txt
+    owner: root
+    group: root
+    mode: '0644'
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Copy App Dockerfile
+  copy:
+    src: Dockerfile
+    dest: /tmp/fastapi-ai-app/Dockerfile
+    owner: root
+    group: root
+    mode: '0644'
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Build FastAPI Docker image locally
+  command: docker build -t "{{ ai_app_image_name }}" /tmp/fastapi-ai-app
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Save built Docker image to tar archive
+  command: docker save "{{ ai_app_image_name }}" -o /tmp/fastapi-ai-app.tar
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Import image archive into K3s containerd registry
+  command: k3s ctr images import /tmp/fastapi-ai-app.tar
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Render AI Application Kubernetes manifests
+  template:
+    src: ai-app-manifests.yaml.j2
+    dest: /tmp/ai-app-manifests.yaml
+    owner: root
+    group: root
+    mode: '0644'
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Apply AI Application Kubernetes manifests
+  command: kubectl apply -f /tmp/ai-app-manifests.yaml
+  when: inventory_hostname in groups['k8s_master']
+
+- name: Wait for AI Application deployment to be ready
+  shell: |
+    kubectl rollout status deployment/{{ ai_app_name }} -n {{ k8s_mlops_namespace }} --timeout=120s
+  changed_when: false
+  when: inventory_hostname in groups['k8s_master']
